@@ -1,7 +1,11 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-# Con setup.py, deepagents se instala como paquete
+# Añadir el directorio src al path de Python para importar deepagents
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
 from deepagents import create_deep_agent
 
 # Instrucciones básicas para el agente

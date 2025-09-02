@@ -1,6 +1,17 @@
 # Environment variables
 python-dotenv==1.1.1
 
+# Core dependencies (needed immediately)
+langgraph>=0.6.6
+langchain>=0.3.27
+langchain-anthropic>=0.3.19
+langchain-core>=0.3.75
+langsmith>=0.4.21
+pydantic>=2.11.7
+httpx>=0.28.1
+fastapi>=0.104.0
+uvicorn>=0.35.0
+
 # LangGraph CLI and API (needed for deployment)
 langgraph-cli>=0.4.0
 langgraph-api>=0.4.7
@@ -8,7 +19,7 @@ langgraph-checkpoint>=2.1.1
 langgraph-runtime-inmem>=0.9.0
 langgraph-sdk>=0.2.4
 
-# Core Python packages (not in setup.py)
+# Core Python packages
 pydantic_core>=2.33.2
 starlette>=0.47.3
 PyYAML>=6.0.2
@@ -23,5 +34,3 @@ requests>=2.32.5
 click>=8.2.1
 structlog>=25.4.0
 orjson>=3.11.3
-
-# Core dependencies are now in setup.py to avoid duplication
