@@ -128,7 +128,7 @@ agent = create_deep_agent(
 
 ### `model` (Optional)
 
-By default, `deepagents` uses `"claude-sonnet-4-20250514"`. You can customize this by passing any [LangChain model object](https://python.langchain.com/docs/integrations/chat/).
+By default, `deepagents` uses `"claude-3-5-haiku-20241022"` (optimized for cost-efficiency). You can customize this by passing any [LangChain model object](https://python.langchain.com/docs/integrations/chat/).
 
 ### `builtin_tools` (Optional)
 
@@ -185,7 +185,7 @@ critique_sub_agent = {
 agent = create_deep_agent(
     tools=[internet_search],
     instructions="You are an expert researcher...",
-    model="claude-sonnet-4-20250514",  # default for main agent and other sub-agents
+    model="claude-3-5-haiku-20241022",  # default for main agent and other sub-agents (cost-optimized)
     subagents=[critique_sub_agent],
 )
 ```

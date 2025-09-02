@@ -183,44 +183,66 @@ The assistant did not use the todo list because this is a single information loo
 
 When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully."""
 
-TASK_DESCRIPTION_PREFIX = """🚨 CRITICAL: DO NOT USE SUB-AGENTS FOR RESEARCH OR ANALYSIS
+TASK_DESCRIPTION_PREFIX = """🚨🚨🚨 ABSOLUTE PROHIBITION: NEVER USE SUB-AGENTS FOR ANY RESEARCH OR ANALYSIS
 
-Instead of using sub-agents, you MUST:
-1. Do ALL research and analysis directly in the main agent with FULL TRANSPARENCY
-2. Show your complete thought process with "loud thinking"
-3. Narrate every step: "I'm now researching X because..."
-4. Document findings immediately: "This source shows Y, which means..."
-5. Let the user see your complete reasoning chain
+🛑 BANNED ACTIONS:
+- Task tool for research
+- Task tool for analysis  
+- Task tool for web searches
+- Task tool for investigations
+- Sub-agents of ANY type for information gathering
+
+✅ MANDATORY APPROACH - Do EVERYTHING directly in main agent:
+1. Use web_search tool DIRECTLY (not through Task)
+2. Use write_file tool DIRECTLY to document findings
+3. NARRATE every search: "Ahora busco información sobre X usando web_search..."
+4. SHOW every source found: "Encontré esta fuente: [URL]..."
+5. ANALYZE findings in real-time: "Esta regulación establece que..."
+
+🔍 RESEARCH PROCESS EXAMPLE:
+"Voy a buscar información sobre gastos de representación..."
+*uses web_search directly*
+"Encontré información en el Estatuto Tributario. Analizando..."
+*analyzes and narrates findings*
+"Creando archivo de fuentes para documentar..."
+*uses write_file directly*
 
 ONLY use Task tool for:
-- Custom slash commands (e.g., /check-file)
-- Specific technical operations that don't involve research/analysis
+- NEVER - Task tool is essentially banned for research
 
-Available agent types (USE SPARINGLY):
-- general-purpose: AVOID FOR RESEARCH - Only for technical file operations when other tools fail
+Available agent types (AVOID COMPLETELY FOR RESEARCH):
+- general-purpose: BANNED FOR RESEARCH - causes sub-agent delegation
 {other_agents}
 """
 
-TASK_DESCRIPTION_SUFFIX = """When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+TASK_DESCRIPTION_SUFFIX = """🚨🚨🚨 TASK TOOL IS ESSENTIALLY BANNED FOR RESEARCH
 
-🚨 CRITICAL RESTRICTION: AVOID Task tool for research and analysis
+🛑 NEVER USE Task TOOL FOR:
+- Research tasks ❌
+- Analysis tasks ❌  
+- Web searches ❌
+- Information gathering ❌
+- Legal research ❌
+- Complex questions ❌
+- ANY investigation ❌
 
-When to use the Task tool (RARE CASES ONLY):
-- Custom slash commands: Task(description="Check file", prompt="/check-file path/to/file.py")
-- Technical file operations when other tools fail
+✅ INSTEAD USE DIRECT TOOLS:
+- web_search (not Task with web_search)
+- write_file (not Task with write_file) 
+- Direct analysis with narration
+- Show complete reasoning process
 
-When NOT to use the Task tool (MOST CASES):
-- Research tasks - Do these directly with loud thinking
-- Analysis tasks - Show your reasoning process 
-- Information gathering - Use web search directly
-- Complex questions - Think out loud in main agent
-- Legal research - Narrate your investigation process
-- File reading - Use Read tool directly
-- Content search - Use search tools directly
-- ANY task where user needs to see your reasoning process
+🚨 THE USER WANTS TO SEE:
+- Your search queries
+- Sources you find
+- How you analyze each source
+- Your reasoning process
+- NOT sub-agent delegation that hides this!
 
+❌ WRONG: Task(description="Research gastos representación")  
+✅ RIGHT: web_search(query="gastos representación Colombia Estatuto Tributario")
 
-🚨 REMEMBER: Avoid Task tool for research/analysis - Show your thinking process instead!
+🚨 REMEMBER: Task tool hides your thinking - BANNED for research!
 
 Usage notes (for the rare cases when Task tool is appropriate):
 1. AVOID concurrent agents for research - do it transparently in main agent

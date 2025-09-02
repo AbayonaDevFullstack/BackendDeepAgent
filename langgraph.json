@@ -1,8 +1,8 @@
 {
-      "dependencies": ["."],
-      "graphs": {
-        "deepagent": {
-          "path": "agent:agent"
-        }
-      }
+  "dependencies": ["."],
+  "graphs": {
+    "deepagent": {
+      "path": "agent:agent"
+    }
   }
+}
