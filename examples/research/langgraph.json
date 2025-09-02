@@ -1,0 +1,9 @@
+{
+    "dependencies": ["."],
+    "graphs": {
+      "deepagent": {
+        "path": "deepagents.graph:graph",
+        "config_schema": "deepagents.configuration:Configuration"
+      }
+    }
+}
