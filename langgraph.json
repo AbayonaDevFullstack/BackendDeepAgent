@@ -2,7 +2,7 @@
   "dependencies": ["."],
   "graphs": {
     "deepagent": {
-      "path": "agent:agent"
+      "path": "agent_fixed:agent"
     }
   }
 }
