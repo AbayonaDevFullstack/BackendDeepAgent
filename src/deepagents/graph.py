@@ -1,11 +1,11 @@
-from deepagents.sub_agent import _create_task_tool, _create_sync_task_tool, SubAgent
-from deepagents.model import get_default_model
-from deepagents.tools import write_todos, write_file, read_file, ls, edit_file
-from deepagents.state import DeepAgentState
+from .sub_agent import _create_task_tool, _create_sync_task_tool, SubAgent
+from .model import get_default_model
+from .tools import write_todos, write_file, read_file, ls, edit_file
+from .state import DeepAgentState
 from typing import Sequence, Union, Callable, Any, TypeVar, Type, Optional
 from langchain_core.tools import BaseTool, tool
 from langchain_core.language_models import LanguageModelLike
-from deepagents.interrupt import create_interrupt_hook, ToolInterruptConfig
+from .interrupt import create_interrupt_hook, ToolInterruptConfig
 from langgraph.types import Checkpointer
 from langgraph.prebuilt import create_react_agent
 

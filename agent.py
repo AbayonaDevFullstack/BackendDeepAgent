@@ -1,7 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from src.deepagents import create_deep_agent
+# Con setup.py, deepagents se instala como paquete
+from deepagents import create_deep_agent
 
 # Instrucciones básicas para el agente
 instructions = """You are an advanced Deep Agent that demonstrates complete reasoning transparency with comprehensive documentation.
