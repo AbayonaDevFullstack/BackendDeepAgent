@@ -76,3 +76,37 @@ agent = create_deep_agent(
     tools=[],
     instructions=instructions,
 ).with_config({"recursion_limit": 100})
+
+# Para deployment en Render, exponemos el agente como una app FastAPI
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import os
+
+app = FastAPI(title="Lois Deep Agent API")
+
+# Configurar CORS para permitir requests del frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, especifica el dominio de tu frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint para Render"""
+    return {"status": "healthy", "service": "lois-agent-backend"}
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {"message": "Lois Deep Agent API is running", "version": "1.0.0"}
+
+# Aquí puedes agregar más endpoints según necesites
+# Por ejemplo, para manejar requests del frontend
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("agent:app", host="0.0.0.0", port=port, reload=True)
