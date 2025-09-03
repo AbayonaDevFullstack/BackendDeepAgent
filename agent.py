@@ -127,10 +127,53 @@ def web_search(query: str) -> str:
     return f"[MODO PRUEBA] Búsqueda simulada para: '{query}'\n\nEn modo completo, esto buscaría información real sobre tu consulta usando DuckDuckGo. Por ahora, basaré mi análisis en conocimiento interno y documentación."
 
 # Crear el agente con herramientas básicas
-agent = create_deep_agent(
-    tools=[web_search],  # Solo herramientas básicas por ahora
-    instructions=instructions,
-).with_config({"recursion_limit": 100})
+try:
+    agent = create_deep_agent(
+        tools=[web_search],  # Solo herramientas básicas por ahora
+        instructions=instructions,
+    ).with_config({"recursion_limit": 100})
+    print("Agente creado exitosamente")
+except Exception as e:
+    print(f"Error creando agente: {e}")
+    # Crear agente simplificado como fallback
+    from langchain_anthropic import ChatAnthropic
+    from langchain.schema import HumanMessage, AIMessage
+    
+    class SimpleAgent:
+        def __init__(self):
+            self.model = ChatAnthropic(
+                model_name="claude-3-5-haiku-20241022",
+                max_tokens=8192,
+                temperature=0.3
+            )
+        
+        def invoke(self, input_data, config=None):
+            messages = input_data.get("messages", [])
+            if messages:
+                # Tomar el último mensaje del usuario
+                user_message = messages[-1][1] if len(messages) > 0 else ""
+                
+                # Generar respuesta usando Claude directamente
+                response = self.model.invoke([HumanMessage(content=f"{instructions}\n\nUser: {user_message}")])
+                
+                return {
+                    "messages": [
+                        HumanMessage(content=user_message),
+                        AIMessage(content=response.content)
+                    ],
+                    "todos": [
+                        {
+                            "content": "Análisis completado",
+                            "status": "completed",
+                            "activeForm": "Completando análisis"
+                        }
+                    ],
+                    "files": {}
+                }
+            return {"messages": [], "todos": [], "files": {}}
+    
+    agent = SimpleAgent()
+    print("Agente simplificado creado como fallback")
 
 # Para deployment en Render, exponemos el agente como una app FastAPI
 from fastapi import FastAPI, HTTPException
@@ -151,14 +194,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Modelos para requests
+# Modelos para requests y responses compatibles con LangGraph API
+from datetime import datetime
+
+class Message(BaseModel):
+    id: str
+    type: str  # "human" | "ai" | "tool"
+    content: str
+    timestamp: str
+    tool_calls: Optional[list] = None
+    tool_call_id: Optional[str] = None
+
+class TodoItem(BaseModel):
+    content: str
+    status: str  # "pending" | "in_progress" | "completed"
+    activeForm: str
+
 class ChatRequest(BaseModel):
     message: str
     thread_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
-    response: str
+    messages: list[Message]
+    todos: list[TodoItem]
+    files: dict[str, str]
     thread_id: str
+    metadata: dict
 
 # Almacén simple de threads en memoria
 threads = {}
@@ -185,10 +246,13 @@ async def root():
 async def chat_endpoint(request: ChatRequest):
     """
     Endpoint para interactuar con el agente de razonamiento profundo.
+    Compatible con LangGraph API format.
     
     - **message**: Tu pregunta o consulta
     - **thread_id**: (Opcional) ID del hilo de conversación para continuar
     """
+    start_time = datetime.utcnow()
+    
     try:
         # Generar thread_id si no se proporciona
         thread_id = request.thread_id or str(uuid.uuid4())
@@ -197,8 +261,20 @@ async def chat_endpoint(request: ChatRequest):
         if thread_id not in threads:
             threads[thread_id] = {
                 "messages": [],
-                "files": {}
+                "files": {},
+                "todos": []
             }
+        
+        # Crear mensaje del usuario
+        user_message = Message(
+            id=str(uuid.uuid4()),
+            type="human",
+            content=request.message,
+            timestamp=datetime.utcnow().isoformat() + "Z"
+        )
+        
+        # Agregar mensaje del usuario al thread
+        threads[thread_id]["messages"].append(user_message)
         
         # Configuración del agente para este thread
         config = {
@@ -208,37 +284,155 @@ async def chat_endpoint(request: ChatRequest):
             "recursion_limit": 100
         }
         
-        # Invocar el agente
-        response = await asyncio.to_thread(
-            agent.invoke,
-            {"messages": [("user", request.message)]},
-            config
-        )
+        # Invocar el agente con mejor manejo de errores
+        try:
+            agent_response = await asyncio.to_thread(
+                agent.invoke,
+                {"messages": [("user", request.message)]},
+                config
+            )
+            print(f"Agent response keys: {list(agent_response.keys()) if isinstance(agent_response, dict) else 'Not a dict'}")
+            print(f"Agent response type: {type(agent_response)}")
+        except Exception as agent_error:
+            print(f"Error específico del agente: {agent_error}")
+            print(f"Tipo de error: {type(agent_error)}")
+            
+            # Crear respuesta por defecto si el agente falla
+            agent_response = {
+                "messages": [],
+                "todos": [],
+                "files": {}
+            }
         
-        # Extraer la respuesta del agente
-        agent_message = ""
-        if "messages" in response and response["messages"]:
-            # Obtener el último mensaje del agente
-            for msg in reversed(response["messages"]):
-                if hasattr(msg, 'content') and msg.content:
-                    agent_message = msg.content
-                    break
-                elif isinstance(msg, dict) and 'content' in msg:
-                    agent_message = msg['content']
-                    break
+        # Extraer datos del agente response
+        agent_messages = []
+        todos_list = []
+        files_dict = {}
+        tools_used = []
         
-        if not agent_message:
-            agent_message = "Lo siento, no pude procesar tu consulta correctamente."
+        # Procesar mensajes del agente de forma más segura
+        if "messages" in agent_response and agent_response["messages"]:
+            try:
+                for msg in agent_response["messages"]:
+                    try:
+                        # Determinar tipo de mensaje de forma más segura
+                        msg_type = "ai"  # Por defecto
+                        content = ""
+                        tool_calls = None
+                        tool_call_id = None
+                        
+                        if hasattr(msg, 'content'):
+                            # Si el contenido es una lista (tool calls + texto)
+                            if isinstance(msg.content, list):
+                                text_parts = []
+                                tool_parts = []
+                                
+                                for part in msg.content:
+                                    if isinstance(part, dict):
+                                        if part.get('type') == 'text':
+                                            text_parts.append(part.get('text', ''))
+                                        elif part.get('type') == 'tool_use':
+                                            tool_parts.append({
+                                                'id': part.get('id'),
+                                                'name': part.get('name'),
+                                                'input': part.get('input')
+                                            })
+                                
+                                content = ' '.join(text_parts)
+                                if tool_parts:
+                                    tool_calls = tool_parts
+                            else:
+                                content = str(msg.content)
+                        else:
+                            content = str(msg)
+                            
+                        if hasattr(msg, '__class__'):
+                            class_name = msg.__class__.__name__.lower()
+                            if "human" in class_name:
+                                msg_type = "human"
+                            elif "tool" in class_name:
+                                msg_type = "tool"
+                                tools_used.append("tool_call")
+                        
+                        # Skip el mensaje del usuario (ya lo agregamos)
+                        if msg_type == "human":
+                            continue
+                            
+                        message_obj = Message(
+                            id=getattr(msg, 'id', str(uuid.uuid4())),
+                            type=msg_type,
+                            content=content,
+                            timestamp=datetime.utcnow().isoformat() + "Z",
+                            tool_calls=tool_calls,
+                            tool_call_id=tool_call_id
+                        )
+                        agent_messages.append(message_obj)
+                    except Exception as msg_error:
+                        print(f"Error procesando mensaje individual: {msg_error}")
+                        continue
+            except Exception as messages_error:
+                print(f"Error procesando lista de mensajes: {messages_error}")
         
-        # Guardar en el thread
-        threads[thread_id]["messages"].append({
-            "user": request.message,
-            "agent": agent_message
-        })
+        # Extraer TODOs si están disponibles
+        if "todos" in agent_response:
+            for todo in agent_response["todos"]:
+                if isinstance(todo, dict):
+                    todo_obj = TodoItem(
+                        content=todo.get("content", ""),
+                        status=todo.get("status", "completed"),
+                        activeForm=todo.get("activeForm", todo.get("content", ""))
+                    )
+                    todos_list.append(todo_obj)
+                    tools_used.append("write_todos")
+        
+        # Extraer archivos si están disponibles
+        if "files" in agent_response:
+            files_dict = agent_response["files"]
+            if files_dict:
+                tools_used.append("write_file")
+        
+        # Si no hay mensajes del agente, crear uno por defecto
+        if not agent_messages:
+            default_message = Message(
+                id=str(uuid.uuid4()),
+                type="ai", 
+                content="Lo siento, no pude procesar tu consulta correctamente.",
+                timestamp=datetime.utcnow().isoformat() + "Z"
+            )
+            agent_messages.append(default_message)
+        
+        # Agregar mensajes del agente al thread
+        threads[thread_id]["messages"].extend(agent_messages)
+        threads[thread_id]["files"].update(files_dict)
+        threads[thread_id]["todos"] = todos_list
+        
+        # Calcular metadata
+        end_time = datetime.utcnow()
+        processing_time = (end_time - start_time).total_seconds()
+        
+        # Estimar tokens (aproximación)
+        total_content = request.message + "".join([msg.content for msg in agent_messages])
+        estimated_tokens = len(total_content.split()) * 1.3  # Aproximación
+        
+        metadata = {
+            "model_used": "claude-3-5-haiku-20241022",
+            "estimated_tokens": int(estimated_tokens),
+            "processing_time_seconds": round(processing_time, 2),
+            "tools_used": list(set(tools_used)) if tools_used else [],
+            "message_count": len(threads[thread_id]["messages"]),
+            "files_count": len(files_dict),
+            "todos_count": len(todos_list)
+        }
+        
+        # Combinar todos los mensajes para la respuesta
+        all_messages = threads[thread_id]["messages"]
         
         return ChatResponse(
-            response=agent_message,
-            thread_id=thread_id
+            messages=all_messages,
+            todos=todos_list,
+            files=files_dict,
+            thread_id=thread_id,
+            metadata=metadata
         )
         
     except Exception as e:
@@ -252,14 +446,40 @@ async def chat_endpoint(request: ChatRequest):
 
 @app.get("/threads/{thread_id}")
 async def get_thread(thread_id: str):
-    """Obtener historial de un thread específico"""
+    """Obtener historial de un thread específico - Compatible con LangGraph API"""
     if thread_id not in threads:
         raise HTTPException(status_code=404, detail="Thread no encontrado")
     
+    thread_data = threads[thread_id]
+    
+    return {
+        "messages": thread_data.get("messages", []),
+        "todos": thread_data.get("todos", []),
+        "files": thread_data.get("files", {}),
+        "thread_id": thread_id,
+        "metadata": {
+            "message_count": len(thread_data.get("messages", [])),
+            "files_count": len(thread_data.get("files", {})),
+            "todos_count": len(thread_data.get("todos", [])),
+            "created_at": datetime.utcnow().isoformat() + "Z"
+        }
+    }
+
+# Endpoint adicional para compatibilidad completa con LangGraph API
+@app.post("/threads")
+async def create_thread():
+    """Crear un nuevo thread - Compatible con LangGraph API"""
+    thread_id = str(uuid.uuid4())
+    threads[thread_id] = {
+        "messages": [],
+        "files": {},
+        "todos": []
+    }
+    
     return {
         "thread_id": thread_id,
-        "messages": threads[thread_id]["messages"],
-        "message_count": len(threads[thread_id]["messages"])
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "metadata": {}
     }
 
 if __name__ == "__main__":
