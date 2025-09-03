@@ -1,0 +1,2 @@
+Prueba de streaming en progreso.
+Este es un archivo de ejemplo para demostrar la funcionalidad.

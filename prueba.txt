@@ -1,0 +1,2 @@
+Este es un archivo de prueba para demostrar el funcionamiento de los tools.
+Estoy escribiendo contenido de manera transparente y documentando cada paso.
