@@ -126,3 +126,135 @@ agent = create_deep_agent(
     tools=[web_search],  # Solo herramientas básicas por ahora
     instructions=instructions,
 ).with_config({"recursion_limit": 100})
+
+# Para deployment en Render, exponemos el agente como una app FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
+import uuid
+import asyncio
+
+app = FastAPI(title="Lois Deep Agent API")
+
+# Configurar CORS para permitir requests del frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, especifica el dominio de tu frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Modelos para requests
+class ChatRequest(BaseModel):
+    message: str
+    thread_id: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    thread_id: str
+
+# Almacén simple de threads en memoria
+threads = {}
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint para Render"""
+    return {"status": "healthy", "service": "lois-agent-backend"}
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Lois Deep Agent API is running", 
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/health",
+            "chat": "/chat",
+            "docs": "/docs"
+        }
+    }
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """
+    Endpoint para interactuar con el agente de razonamiento profundo.
+    
+    - **message**: Tu pregunta o consulta
+    - **thread_id**: (Opcional) ID del hilo de conversación para continuar
+    """
+    try:
+        # Generar thread_id si no se proporciona
+        thread_id = request.thread_id or str(uuid.uuid4())
+        
+        # Obtener o crear estado del thread
+        if thread_id not in threads:
+            threads[thread_id] = {
+                "messages": [],
+                "files": {}
+            }
+        
+        # Configuración del agente para este thread
+        config = {
+            "configurable": {
+                "thread_id": thread_id
+            },
+            "recursion_limit": 100
+        }
+        
+        # Invocar el agente
+        response = await asyncio.to_thread(
+            agent.invoke,
+            {"messages": [("user", request.message)]},
+            config
+        )
+        
+        # Extraer la respuesta del agente
+        agent_message = ""
+        if "messages" in response and response["messages"]:
+            # Obtener el último mensaje del agente
+            for msg in reversed(response["messages"]):
+                if hasattr(msg, 'content') and msg.content:
+                    agent_message = msg.content
+                    break
+                elif isinstance(msg, dict) and 'content' in msg:
+                    agent_message = msg['content']
+                    break
+        
+        if not agent_message:
+            agent_message = "Lo siento, no pude procesar tu consulta correctamente."
+        
+        # Guardar en el thread
+        threads[thread_id]["messages"].append({
+            "user": request.message,
+            "agent": agent_message
+        })
+        
+        return ChatResponse(
+            response=agent_message,
+            thread_id=thread_id
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error procesando la consulta: {str(e)}"
+        )
+
+@app.get("/threads/{thread_id}")
+async def get_thread(thread_id: str):
+    """Obtener historial de un thread específico"""
+    if thread_id not in threads:
+        raise HTTPException(status_code=404, detail="Thread no encontrado")
+    
+    return {
+        "thread_id": thread_id,
+        "messages": threads[thread_id]["messages"],
+        "message_count": len(threads[thread_id]["messages"])
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("agent_fixed:app", host="0.0.0.0", port=port, reload=True)
