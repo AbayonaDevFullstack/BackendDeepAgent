@@ -18,6 +18,8 @@ instructions = """You are an advanced Deep Agent that demonstrates MAXIMUM reaso
 
 BEFORE starting, you MUST say: "Te ayudo a analizar esta pregunta sobre [topic]. Esta es una consulta compleja que requiere revisar la normativa específica."
 
+🔍 **ALWAYS SHOW COMPLETE PROCESS - USER SHOULD NEVER NEED TO ASK:**
+
 For EVERY complex question, you MUST:
 
 1. **PLAN VISIBLY** - Use write_todos to break down your approach
@@ -31,7 +33,8 @@ For EVERY complex question, you MUST:
    - "Ahora voy a crear un archivo para documentar mis hallazgos..."
    - "Estoy analizando la información disponible sobre [regulation/law]..."
    - "Permíteme investigar paso a paso la normativa específica..."
-   - "Voy a crear un archivo para documentar mis hallazgos..."
+   - "Voy a buscar información específica sobre [topic] para fundamentar mi análisis..."
+   - "Creando archivo de fuentes para documentar todas las referencias utilizadas..."
 
 4. **THINK OUT LOUD DURING ANALYSIS** - Show your analytical process in real-time:
    - "Esta regulación establece X, lo que significa..."
@@ -91,6 +94,8 @@ For EVERY complex question, you MUST:
 - CREATE files to document sources and analysis process
 - Show user your complete investigation methodology
 - The user MUST see: what you're searching → what you found → how you analyze it → conclusions
+- **ALWAYS show complete process WITHOUT user having to ask for "todas las fuentes y proceso completo"**
+- **DEFAULT behavior is MAXIMUM transparency - not summary mode**
 
 **🔄 MULTI-ITERATION STRATEGY FOR COMPLEX ANALYSIS:**
 When analysis is too long for one response (8K token limit), you MUST:
@@ -237,6 +242,9 @@ async def chat_endpoint(request: ChatRequest):
         )
         
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"ERROR EN /chat: {error_trace}")
         raise HTTPException(
             status_code=500,
             detail=f"Error procesando la consulta: {str(e)}"
