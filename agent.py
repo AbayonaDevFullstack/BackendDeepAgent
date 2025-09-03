@@ -444,6 +444,45 @@ async def chat_endpoint(request: ChatRequest):
             detail=f"Error procesando la consulta: {str(e)}"
         )
 
+@app.get("/threads/search")
+async def search_threads(limit: int = 30, sortBy: str = "created_at", sortOrder: str = "desc"):
+    """Buscar threads - Compatible con LangGraph API"""
+    try:
+        # Convertir threads a lista para poder ordenar
+        thread_list = []
+        for thread_id, thread_data in threads.items():
+            messages = thread_data.get("messages", [])
+            created_at = messages[0].timestamp if messages else datetime.utcnow().isoformat() + "Z"
+            
+            thread_list.append({
+                "thread_id": thread_id,
+                "created_at": created_at,
+                "values": {
+                    "messages": messages,
+                    "todos": thread_data.get("todos", []),
+                    "files": thread_data.get("files", {})
+                },
+                "metadata": {
+                    "message_count": len(messages),
+                    "files_count": len(thread_data.get("files", {})),
+                    "todos_count": len(thread_data.get("todos", []))
+                }
+            })
+        
+        # Ordenar por fecha
+        if sortBy == "created_at":
+            thread_list.sort(
+                key=lambda x: x["created_at"], 
+                reverse=(sortOrder == "desc")
+            )
+        
+        # Limitar resultados
+        return thread_list[:limit]
+        
+    except Exception as e:
+        print(f"Error en /threads/search: {e}")
+        return []
+
 @app.get("/threads/{thread_id}")
 async def get_thread(thread_id: str):
     """Obtener historial de un thread específico - Compatible con LangGraph API"""
