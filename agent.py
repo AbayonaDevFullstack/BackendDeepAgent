@@ -444,9 +444,25 @@ async def chat_endpoint(request: ChatRequest):
             detail=f"Error procesando la consulta: {str(e)}"
         )
 
+# Modelo para búsqueda de threads
+class ThreadSearchRequest(BaseModel):
+    limit: int = 30
+    offset: int = 0
+    sort_by: str = "created_at"
+    sort_order: str = "desc"
+
 @app.get("/threads/search")
-async def search_threads(limit: int = 30, sortBy: str = "created_at", sortOrder: str = "desc"):
-    """Buscar threads - Compatible con LangGraph API"""
+async def search_threads_get(limit: int = 30, sortBy: str = "created_at", sortOrder: str = "desc"):
+    """Buscar threads - GET Compatible con LangGraph API"""
+    return await search_threads_logic(limit, 0, sortBy, sortOrder)
+
+@app.post("/threads/search")
+async def search_threads_post(request: ThreadSearchRequest):
+    """Buscar threads - POST Compatible con LangGraph API"""
+    return await search_threads_logic(request.limit, request.offset, request.sort_by, request.sort_order)
+
+async def search_threads_logic(limit: int, offset: int, sort_by: str, sort_order: str):
+    """Lógica común para búsqueda de threads"""
     try:
         # Convertir threads a lista para poder ordenar
         thread_list = []
@@ -470,14 +486,16 @@ async def search_threads(limit: int = 30, sortBy: str = "created_at", sortOrder:
             })
         
         # Ordenar por fecha
-        if sortBy == "created_at":
+        if sort_by == "created_at":
             thread_list.sort(
                 key=lambda x: x["created_at"], 
-                reverse=(sortOrder == "desc")
+                reverse=(sort_order == "desc")
             )
         
-        # Limitar resultados
-        return thread_list[:limit]
+        # Aplicar offset y limit
+        start_index = offset
+        end_index = offset + limit
+        return thread_list[start_index:end_index]
         
     except Exception as e:
         print(f"Error en /threads/search: {e}")
@@ -519,6 +537,60 @@ async def create_thread():
         "thread_id": thread_id,
         "created_at": datetime.utcnow().isoformat() + "Z",
         "metadata": {}
+    }
+
+# Modelo para historial de thread
+class ThreadHistoryRequest(BaseModel):
+    limit: int = 1000
+
+@app.post("/threads/{thread_id}/history")
+async def get_thread_history(thread_id: str, request: ThreadHistoryRequest):
+    """Obtener historial de un thread - Compatible con LangGraph API"""
+    if thread_id not in threads:
+        raise HTTPException(status_code=404, detail="Thread no encontrado")
+    
+    thread_data = threads[thread_id]
+    messages = thread_data.get("messages", [])
+    
+    # Limitar mensajes según el request
+    limited_messages = messages[-request.limit:] if request.limit < len(messages) else messages
+    
+    return {
+        "values": {
+            "messages": limited_messages,
+            "todos": thread_data.get("todos", []),
+            "files": thread_data.get("files", {})
+        },
+        "metadata": {
+            "message_count": len(limited_messages),
+            "files_count": len(thread_data.get("files", {})),
+            "todos_count": len(thread_data.get("todos", []))
+        },
+        "thread_id": thread_id
+    }
+
+@app.get("/threads/{thread_id}/state")
+async def get_thread_state(thread_id: str):
+    """Obtener estado actual de un thread - Compatible con LangGraph API"""
+    if thread_id not in threads:
+        raise HTTPException(status_code=404, detail="Thread no encontrado")
+    
+    thread_data = threads[thread_id]
+    
+    return {
+        "values": {
+            "messages": thread_data.get("messages", []),
+            "todos": thread_data.get("todos", []),
+            "files": thread_data.get("files", {})
+        },
+        "next": [],  # Para compatibilidad con LangGraph
+        "metadata": {
+            "message_count": len(thread_data.get("messages", [])),
+            "files_count": len(thread_data.get("files", {})),
+            "todos_count": len(thread_data.get("todos", []))
+        },
+        "created_at": thread_data.get("messages", [{}])[0].get("timestamp") if thread_data.get("messages") else datetime.utcnow().isoformat() + "Z",
+        "thread_id": thread_id
     }
 
 if __name__ == "__main__":
